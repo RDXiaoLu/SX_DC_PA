@@ -1,0 +1,80 @@
+C51 COMPILER V9.01   BSP_UART                                                              04/24/2022 01:30:03 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE BSP_UART
+OBJECT MODULE PLACED IN ..\Obj\Bsp_uart.obj
+COMPILER INVOKED BY: E:\KEILC51\C51\BIN\C51.EXE ..\User\uart\Bsp_uart.c LARGE OPTIMIZE(1,SPEED) BROWSE DEBUG OBJECTEXTEN
+                    -D PRINT(.\Bsp_uart.lst) OBJECT(..\Obj\Bsp_uart.obj)
+
+line level    source
+
+   1          #include "Bsp_uart.h"
+   2          
+   3          static int LED_CTL(int which, int status);
+   4          static void U1SEND_C(unsigned char SEND_C);             //串口1发送单字符数据函数
+   5          char putchar(char ch);                  //发送字符重定向函数
+   6          
+   7          /* C99支持乱序赋值结构体 C89不支持
+   8          struct led_operations LED{
+   9                  .num = LED_NUM;
+  10                  .led_ctl = LED_CTL;     
+  11          };
+  12          */
+  13          
+  14          //初始化LED外设结构体
+  15          struct uart_operations UART_fops = {UART_NUM};
+  16          
+  17          /**
+  18           * @brief  UART1_Init() 串口1初始化
+  19           * @param  无
+  20           * @retval 无
+  21           */
+  22          void UART1_Init(void)
+  23          {
+  24   1              SCON=0x50;                      //181结构，可变波特率，允许数据接收
+  25   1              AUXR|=0x01;                     //串口1选择定时器2为波特率发生器
+  26   1              AUXR|=0x04;                     //定时器时钟1T模式
+  27   1              T2L=BAUD_SET;           //设置定时初始值
+  28   1              T2H=BAUD_SET>>8;//设置定时初始值
+  29   1              AUXR|=0x10;                     //定时器2开始计时
+  30   1              RI=0;TI=0;                      //清除接收数据标志位和发送数据标志位
+  31   1      }
+  32          
+  33          /**
+  34           * @brief  U1SEND_C 串口1发送单字符数据  有形参SEND_C即为欲发送单字节
+  35           * @param  无
+  36           * @retval 无
+  37           */
+  38          void U1SEND_C(unsigned char SEND_C)
+  39          {
+  40   1              TI=0;                           //清除发送完成标志位
+  41   1              SBUF=SEND_C;            //发送数据
+  42   1              while(!TI);                     //等待数据发送完成
+  43   1      }
+  44          
+  45          /**
+  46           * @brief  char putchar(char ch) 发送字符重定向
+  47           * @param  无
+  48           * @retval 无
+  49           */
+  50          char putchar(char ch)
+  51          {
+  52   1              U1SEND_C((unsigned char)ch);//通过串口1发送数据
+  53   1              return ch;
+  54   1      }
+C51 COMPILER V9.01   BSP_UART                                                              04/24/2022 01:30:03 PAGE 2   
+
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     60    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =      4    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

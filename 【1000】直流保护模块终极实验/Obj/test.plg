@@ -1,0 +1,21 @@
+<html>
+<body>
+<pre>
+<h1>礦ision Build Log</h1>
+<h2>Project:</h2>
+F:\思修电子STC8H8k64U扩展例程（小芦）\【16】项目实战_液晶菜单 - 调电压电流保护范围\Project\test.uvproj
+Project File Date:  04/24/2022
+
+<h2>Output:</h2>
+Build target 'Target 1'
+compiling main.c...
+linking...
+Program Size: data=15.2 xdata=431 code=15701
+creating hex file from "..\Obj\test"...
+"..\Obj\test" - 0 Error(s), 0 Warning(s).
+Build target 'Target 1'
+compiling main.c...
+linking...
+Program Size: data=15.2 xdata=431 code=15950
+creating hex file from "..\Obj\test"...
+"..\Obj\test" - 0 Error(s), 0 Warning(s).

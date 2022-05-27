@@ -1,0 +1,167 @@
+C51 COMPILER V9.01   BSP_LCD                                                               04/24/2022 01:30:03 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE BSP_LCD
+OBJECT MODULE PLACED IN ..\Obj\Bsp_lcd.obj
+COMPILER INVOKED BY: E:\KEILC51\C51\BIN\C51.EXE ..\User\lcd\Bsp_lcd.c LARGE OPTIMIZE(1,SPEED) BROWSE DEBUG OBJECTEXTEND 
+                    -PRINT(.\Bsp_lcd.lst) OBJECT(..\Obj\Bsp_lcd.obj)
+
+line level    source
+
+   1          #include "Bsp_lcd.h"
+   2          
+   3          static void lcd_delay(unsigned int Cnt);
+   4          static void LCD_WRITE(unsigned char cmdordata,unsigned char writetype);
+   5          static void Dis_Line(unsigned char *str, int y);
+   6          static void Dis_Char(int x, int y, char c);
+   7          static void Dis_Str(int x, int y, char *str);
+   8          //static bit Busy(void);
+   9          
+  10          
+  11          /* C99支持乱序赋值结构体
+  12          struct led_operations LED{
+  13                  .num = LED_NUM;
+  14                  .led_ctl = LED_CTL;     
+  15          };
+  16          */
+  17          
+  18          //初始化LED外设结构体
+  19          struct lcd_operations LCD_fops = {
+  20                   LCD_NUM,
+  21                   LCD_WRITE,
+  22                   Dis_Line,
+  23                   Dis_Char,
+  24                   Dis_Str,
+  25          };
+  26          
+  27          
+  28          /**
+  29           * @brief  LCD_WRITE LCD写数据/命令函数
+  30           * @param  cmdordata-写入程序   writetype-写入类型
+  31           * @retval 无
+  32           */
+  33           static void LCD_WRITE(unsigned char cmdordata,unsigned char writetype)
+  34          {
+  35   1              LCDRS=writetype;                                        //判断写入类型0为命令1为数据
+  36   1              lcd_delay(5);                                                                   //延时等待稳定
+  37   1              LCDDATA&=0x0F;                                          //清高四位
+  38   1              LCDDATA|=cmdordata&0xF0;        //写高四位
+  39   1              LCDEN=1;lcd_delay(10);                          //使能置“1”
+  40   1              LCDEN=0;lcd_delay(10);                          //使能清“0”
+  41   1              cmdordata=cmdordata<<4;         //低四位移到高四位
+  42   1              LCDDATA&=0x0F;                                          //清高四位
+  43   1              LCDDATA|=cmdordata&0xF0;        //写低四位
+  44   1              LCDEN=1;lcd_delay(10);                          //使能置“1”
+  45   1              LCDEN=0;lcd_delay(10);                          //使能清“0”
+  46   1      }
+  47          
+  48          /**
+  49           * @brief  Dis_Line str-要显示的字符串 不超过16个 y显示的行 1-第一行 2-第二行
+  50           * @param  无
+  51           * @retval 无
+  52           */
+  53          static void Dis_Line(unsigned char *str, int y)
+  54          {
+C51 COMPILER V9.01   BSP_LCD                                                               04/24/2022 01:30:03 PAGE 2   
+
+  55   1        unsigned char i=0;                                                                    //定义控制循环变量i
+  56   1        if(y==1)
+  57   1              LCD_fops.write(0x80,0);//选择第一行
+  58   1        else if(y==2)LCD_fops.write(0xC0,0);  //第二行
+  59   1              lcd_delay(100);                                                 //等待液晶显示稳定
+  60   1        for(i=0;i<16;i++)                     //第一行先写入16个字符
+  61   1        {
+  62   2      
+  63   2                      lcd_delay(10);                          //等待液晶显示稳定
+  64   2                      LCD_fops.write(str[i],1);               //写入菜单项内容
+  65   2                      lcd_delay(10);                          //等待液晶显示稳定 
+  66   2      
+  67   2        }
+  68   1      }
+  69          
+  70          /**
+  71           * @brief  Dis_Char y显示的行 1-第一行 2-第二行 c-要显示的字符  
+  72           * @param  无
+  73           * @retval 无
+  74           */
+  75          static void Dis_Char(int x, int y, char c)
+  76          {
+  77   1        if(y==1)
+  78   1              LCD_fops.write(0x80+x,0);//选择第一行
+  79   1        else if(y==2)LCD_fops.write(0xC0+x,0);  //第二行
+  80   1              lcd_delay(100);                                                 //等待液晶显示稳定
+  81   1              LCD_fops.write(c,1);
+  82   1      }
+  83          
+  84          /**
+  85           * @brief  Dis_Str x列位置 y显示的行 1-第一行 2-第二行 str-要显示的字符串  
+  86           * @param  无
+  87           * @retval 无
+  88           */
+  89          static void Dis_Str(int x, int y, char *str)
+  90          {
+  91   1        if(y==1)
+  92   1              LCD_fops.write(0x80+x,0);//选择第一行
+  93   1        else if(y==2)LCD_fops.write(0xC0+x,0);  //第二行
+  94   1              lcd_delay(100);                                                 //等待液晶显示稳定
+  95   1              while(*str != '\0')
+  96   1              {
+  97   2                      LCD_fops.write(*str,1);
+  98   2                      str++;
+  99   2              }
+ 100   1      }
+ 101          
+ 102          
+ 103          /**
+ 104           * @brief  LCD_Init LCD初始化
+ 105           * @param  无
+ 106           * @retval 无
+ 107           */
+ 108          void LCD_Init(void)
+ 109          {
+ 110   1              //配置P0.0-2为准双向/弱上拉模式
+ 111   1              P0M0&=0xF8;                     //P0M0.4-6=0
+ 112   1              P0M1&=0xF8;                     //P0M1.4-6=0
+ 113   1              //配置P2.4-7为准双向/弱上拉模式
+ 114   1              P2M0&=0x0F;                     //P2M0.4-7=0
+ 115   1              P2M1&=0x0F;                     //P2M1.4-7=0
+ 116   1              lcd_delay(5);                           //等待I/O模式配置稳定
+C51 COMPILER V9.01   BSP_LCD                                                               04/24/2022 01:30:03 PAGE 3   
+
+ 117   1              LCDRW=0;                                //因只涉及写入操作，故将RW引脚直接置低
+ 118   1              lcd_delay(5);                           //等待I/O模式配置稳定
+ 119   1              LCD_fops.write(0x32,0);lcd_delay(10);//0x32非命令，参见HD44780数据手册
+ 120   1              LCD_fops.write(0x28,0);lcd_delay(10);//数据总线为4位，显示2行，5*7点阵/每字符
+ 121   1              LCD_fops.write(0x0C,0);lcd_delay(10);//设置开显示，不显示光标
+ 122   1              LCD_fops.write(0x06,0);lcd_delay(10);//写入新数据后显示屏整体不移动仅光标右移
+ 123   1              LCD_fops.write(0x01,0);lcd_delay(10);//写入清屏命令
+ 124   1      
+ 125   1      }
+ 126          /**
+ 127           * @brief  LCD_Init LCD延时
+ 128           * @param  无
+ 129           * @retval 无
+ 130           */
+ 131          static void lcd_delay(unsigned int Cnt)
+ 132          {
+ 133   1        unsigned char i,j;
+ 134   1        while (Cnt--)//Count形参控制延时次数
+ 135   1        {
+ 136   2          for(i=0;i<50;i++)
+ 137   2            for(j=0;j<20;j++);
+ 138   2        }
+ 139   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    889    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     38    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

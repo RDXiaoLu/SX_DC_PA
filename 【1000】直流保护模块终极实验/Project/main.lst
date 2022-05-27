@@ -1,0 +1,753 @@
+C51 COMPILER V9.01   MAIN                                                                  04/24/2022 01:49:45 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN ..\Obj\main.obj
+COMPILER INVOKED BY: E:\KEILC51\C51\BIN\C51.EXE ..\User\main.c LARGE OPTIMIZE(1,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.
+                    -\main.lst) OBJECT(..\Obj\main.obj)
+
+line level    source
+
+   1          /*********************************************************************
+   2           * 实验名称：   直流保护模块究极实验
+   3           
+   4           灯+             按键+             继电器+
+   5           
+   6           电压采集+           1602+                 内部EEPROM+
+   7           
+   8           链表线程+           过流定时恢复+     过功率定时恢复+                  
+   9           
+  10           欠压检测+               过压检测+                      过流检测+
+  11                                            
+  12           过功率检测
+  13                                                                  
+  14           * 选配书籍：   上册-《深入浅出STC8增强型51单片机进阶攻略》2022已出版
+  15                                                                  下册-《深入浅出STC8增强型51单片机实战攻略》还在写作
+  16           * 书籍作者：   龙顺宇编著 清华大学出版社出版
+  17           * 淘宝店铺：   https://520mcu.taobao.com/
+  18           * 实验平台：   思修电子STC8“战将”系列小王子开发板
+  19           * 芯片型号：   STC8H3K64S4-LQFP32（程序微调后可移植至STC其他系列单片机）
+  20           * 时钟说明：   片内IRC高速24MHz时钟，使用STC-ISP下载程序时配置
+  21           * 实验说明：   插装1602字符液晶模块（注意1脚位置，切莫插反或插错），检查无误后给开发板上电，做好ST
+  22           C-ISP配置并下载程序。
+  23           线程1配置电压保护范围，默认直接存储到内置IAP，可通过配置宏定义，选择是否启用EEPOM中的参数，或将参数存储到
+             -EEPROM中
+  24           线程2配置电流保护范围，默认直接存储到内置IAP，可通过配置宏定义，选择是否启用EEPOM中的参数，或将参数存储到
+             -EEPROM中
+  25           线程3配置功率保护范围，默认直接存储到内置IAP，可通过配置宏定义，选择是否启用EEPOM中的参数，或将参数存储到
+             -EEPROM中
+  26           线程4，显示，电流+电压+功率，并不断比较电流，电压，功率是否符合设定参数，如果不符合，则打开继电器并启用自
+             -恢复定时器，打开相应状态指示灯。
+  27           
+  28           KEY1左右旋转选择要执行的功能（线程）
+  29           KEY2单击后进入该线程，此时页面显示执行线程的线程函数名称，并且执行线程函数。再次单机KEY2。返回选择页面。
+  30           
+  31          *********************************************************************/
+  32          #include "STC8H.h"
+  33          #include "stdio.h"
+  34          #include "stdlib.h"
+  35          #include "string.h"
+  36          #include "math.h"  //用到pow 
+  37          #include "./led/Bsp_led.h"
+  38          #include "./key/Bsp_key.h"
+  39          #include "./lcd/Bsp_lcd.h"
+  40          #include "./adc/Bsp_adc.h"
+  41          #include "./uart/Bsp_uart.h"
+  42          #include "./relay/Bsp_relay.h"
+  43          #include "./lap/Bsp_lap.h"
+  44          
+  45          
+  46          /***************************用户自定义数据区域***********************/
+  47          #define OPEN 1
+  48          #define CLOSE 0
+  49          
+  50          #define Max_Index 4 
+C51 COMPILER V9.01   MAIN                                                                  04/24/2022 01:49:45 PAGE 2   
+
+  51          #define Min_Index 1
+  52          //#define NULL (void *)0
+  53          
+  54          int  List_Index = 2;    //液晶主菜单索引
+  55          int  List_Flag = 0;     //索引标志 1则可以进入选项 0则只停留在菜单选择
+  56          
+  57          /* 定义线程结构体 */
+  58          typedef struct Thread{
+  59                  int PID;                                        //进程号
+  60                  char name[17];                          //显示内容
+  61                  void (*Thread_Fun)(void);       //线程函数
+  62                  struct Thread *Next;
+  63          }Thread,*PThread;
+  64          
+  65          PThread g_pThread = NULL; //链表头节点
+  66          unsigned char g_flag = 0;  //线程中断使能标志
+  67          #define OPEN 1
+  68          #define CLOSE 0
+  69          
+  70          int V_MAX =  35;          /* 输入限定范围最大值 */
+  71          int V_MIN =  25;          /* 输入限定范围最小值 */
+  72          static unsigned int AD_Vtemp[10]={0};//装载10次ADC采样数据
+  73          static unsigned int AD_val=0;                           
+  74          char v_maxstr[4];         //初始化
+  75          char v_minstr[4];
+  76          char vol_str[15];
+  77          
+  78          
+  79          int I_MAX =  10;          /* 输入限定范围最大值 */
+  80          int I_MIN =  0;   /* 输入限定范围最小值 */                      
+  81          char i_maxstr[4];         //初始化
+  82          char i_minstr[4];
+  83          char cur_str[15];
+  84          
+  85          int P_MAX =  30;          /* 输入限定范围最大值 */
+  86          int P_MIN =  0;   /* 输入限定范围最小值 */                      
+  87          char p_maxstr[4];         //初始化
+  88          char p_minstr[4];
+  89          char pow_str[10];
+  90          
+  91          double GETcurrent = 0.0;
+  92          double GETvoltage = 0.0;
+  93          double Power = 0.0;
+  94          
+  95          #define Measure_I 0x00
+  96          #define Measure_V 0x02
+  97          /*****************************函数声明区域***************************/
+  98          void delay(unsigned int Count);                 //延时函数
+  99          
+ 100          
+ 101          void OS_Init(void);                               //液晶显示菜单框架初始化
+ 102          void Register_Threads(void);              //线程登记函数
+ 103          void Thread_List(PThread ptThread);       //线程链表函数
+ 104          PThread Thread_Index(int Index);          //线程索引函数
+ 105          
+ 106          void Thread_one(void);                          //线程1函数
+ 107          void Thread_two(void);                          //线程2函数
+ 108          void Thread_three(void);                        //线程3函数
+ 109          void Thread_four(void);                         //线程4函数
+ 110          void Thread_five(void);                         //线程5函数
+ 111          
+ 112          extern void delay(unsigned int Count); /* 粗略延时 */
+C51 COMPILER V9.01   MAIN                                                                  04/24/2022 01:49:45 PAGE 3   
+
+ 113          static void OS_Init(void);       /* 系统硬件初始化 */
+ 114          void Timer2Init(void); /* 自恢复定时器 */
+ 115          
+ 116          /**
+ 117           * @brief  AVG_AD_Vtemp() 输入电压中位数平均值滤波函数
+ 118           * @param  无
+ 119           * @retval 无
+ 120           */
+ 121          void AVG_AD_Vtemp(void)
+ 122          {
+ 123   1              unsigned char i,j;                                                              //定义排序用内外层循环变量i和j
+ 124   1              unsigned int temp;                                                      //定义中间“暂存”变量temp
+ 125   1              for(i=10;i>=1;i--)              //外层循环
+ 126   1              {
+ 127   2                      for(j=0;j<(i-1);j++)//内层循环
+ 128   2                      {
+ 129   3                              if(AD_Vtemp[j]>AD_Vtemp[j+1])//数值比较
+ 130   3                              {
+ 131   4                                      temp=AD_Vtemp[j];//数值换位
+ 132   4                                      AD_Vtemp[j]=AD_Vtemp[j+1];
+ 133   4                                      AD_Vtemp[j+1]=temp;
+ 134   4                              }
+ 135   3                      }
+ 136   2              }
+ 137   1              for(i=2;i<=7;i++)                               //去掉2个最低去掉2个最高
+ 138   1              AD_val+=AD_Vtemp[i];            //将中间6个数值累加
+ 139   1              AD_val=(unsigned int)(AD_val/6);        //累加和求平均值
+ 140   1      }
+ 141          
+ 142          /******************************主函数区域****************************/
+ 143          void main(void)
+ 144          {
+ 145   1              PThread ptThread = NULL;  /* 初始化链表 */
+ 146   1      
+ 147   1              OS_Init(); /* 系统硬件初始化 */
+ 148   1      
+ 149   1              printf("--------------------------------------\r\n");
+ 150   1              printf("欢迎来到思修电子直流保护开发板的终极实验");     
+ 151   1              printf("--------------------------------------\r\n");
+ 152   1      
+ 153   1              while(1)
+ 154   1              {
+ 155   2                      /* 根据线程索引执行相应函数 */
+ 156   2                      printf("List_Index = %d\n",List_Index); 
+ 157   2                      ptThread =      Thread_Index(List_Index);       
+ 158   2      
+ 159   2                      
+ 160   2                      if(List_Flag)       //EC11按下 执行当前选择线程的线程函数
+ 161   2                      {
+ 162   3                              ptThread->Thread_Fun();
+ 163   3                              List_Index = 1;  //退出线程函数后 从线程1开始选择
+ 164   3                      }
+ 165   2                      
+ 166   2                      LCD_fops.dis_line(ptThread->name,1); //刷新显示
+ 167   2                      LCD_fops.dis_line("                ",2);
+ 168   2              }       
+ 169   1      }
+ 170          
+ 171          /**
+ 172           * @brief  OS_Init 硬件初始化
+ 173           * @param  无
+ 174           * @retval 无
+C51 COMPILER V9.01   MAIN                                                                  04/24/2022 01:49:45 PAGE 4   
+
+ 175           */
+ 176          void OS_Init(void)
+ 177          {
+ 178   1              LED_Init();     
+ 179   1              KEY_Init();
+ 180   1              RELAY_Init();
+ 181   1              LCD_Init();
+ 182   1              ADC_Init();
+ 183   1              UART1_Init();
+ 184   1              Timer2Init();           //2毫秒@24.000MHz
+ 185   1              //使能P3^2 P3^3的外部中断
+ 186   1              
+ 187   1              IT1 = 1; //使能 INT1 下降沿中断
+ 188   1              EX1 = 1; //使能 INT1 中断
+ 189   1              EA = 1;   //打开总中断
+ 190   1      
+ 191   1              LCD_fops.dis_line(" Mode selection ",0);
+ 192   1              LCD_fops.dis_line("--    MODE    --",1);
+ 193   1              List_Index = 1;
+ 194   1              delay(5);
+ 195   1              Register_Threads();
+ 196   1              
+ 197   1              IT0 = 1;  //使能INT0下降沿中断
+ 198   1              EX0 = 1;  //使能INT0中断
+ 199   1      
+ 200   1      }
+ 201          /*
+ 202                  线程索引
+ 203          */
+ 204          PThread Thread_Index(int Index)
+ 205          {
+ 206   1              PThread ptTmp = g_pThread;
+ 207   1              while(ptTmp)
+ 208   1              {
+ 209   2                      if(ptTmp->PID == Index) 
+ 210   2                              return ptTmp;
+ 211   2                      ptTmp = ptTmp->Next;
+ 212   2              }
+ 213   1              return NULL;
+ 214   1      }
+ 215          /*
+ 216          线程初始化 
+ 217          struct Thread tThread1 = {
+ 218          //              .PID = 1,
+ 219          //              .name = "--  thread_1x  --",
+ 220          //              .Thread = Thread_one,
+ 221          //};
+ 222          //可以用该方法乱序赋值结构体，C99标准
+ 223          
+ 224          /*
+ 225                  线程登记          注意！！线程5不可用，用来填充链表头
+ 226          */
+ 227          void Register_Threads(void)
+ 228          {
+ 229   1              Thread tThread5 = {5, "--            --", Thread_five};
+ 230   1              Thread tThread4 = {4, "--  thread_4  --", Thread_four};
+ 231   1              Thread tThread2 = {2, "--  thread_2  --", Thread_two};
+ 232   1              Thread tThread3 = {3, "--  thread_3  --", Thread_three};
+ 233   1              Thread tThread1 = {1, "--  thread_1  --", Thread_one};  
+ 234   1              
+ 235   1              Thread_List(&tThread5);
+ 236   1              Thread_List(&tThread4);
+C51 COMPILER V9.01   MAIN                                                                  04/24/2022 01:49:45 PAGE 5   
+
+ 237   1              Thread_List(&tThread3);
+ 238   1              Thread_List(&tThread2);
+ 239   1              Thread_List(&tThread1);
+ 240   1              
+ 241   1      
+ 242   1      }
+ 243          
+ 244          /*
+ 245                  线程链表建立 头插法
+ 246          */
+ 247          void Thread_List(PThread ptThread)
+ 248          {
+ 249   1              ptThread->Next = g_pThread;
+ 250   1              g_pThread = ptThread;
+ 251   1      }
+ 252          /*
+ 253                  
+ 254          */
+ 255          /**
+ 256           * @brief  Thread_one 线程函数建立模板
+ 257           * @param  无
+ 258           * @retval 无
+ 259           */
+ 260          void Thread_one(void)
+ 261          {
+ 262   1               unsigned char index = 0;
+ 263   1               LCD_fops.dis_line("-protect V set -",1);
+ 264   1               LCD_fops.write(0x0d,0);   //打开所在字符闪烁
+ 265   1               sprintf(v_maxstr, "%2d",V_MAX);                  /* 变量转换成字符串存放在对应字符数组中 */
+ 266   1              sprintf(v_minstr, "%2d",V_MIN); 
+ 267   1               /* 液晶显示刷新 */
+ 268   1              LCD_fops.dis_str(0,2,v_minstr);
+ 269   1              LCD_fops.dis_char(3,2,'<');
+ 270   1              LCD_fops.dis_str(4,2,"V__range");       //在x=4 y=2 的位置开始显示字符串vol_str 
+ 271   1              LCD_fops.dis_char(12,2,'<');
+ 272   1              LCD_fops.dis_str(14,2,v_maxstr);
+ 273   1               while(1)
+ 274   1               {
+ 275   2                      if(KEY_fops.read(7) == 0)               //光标选择索引控制
+ 276   2                      {
+ 277   3                              delay(20);
+ 278   3                              if(KEY_fops.read(7) == 0)
+ 279   3                              {
+ 280   4                                      if(index >= 0 && index <=3) index ++;
+ 281   4                                      if(index < 0) index = 3;
+ 282   4                                      if(index > 3) index = 0;
+ 283   4                                      while(!(KEY_fops.read(7)));
+ 284   4                              }
+ 285   3                      }
+ 286   2                      if(KEY_fops.read(3) == 0)
+ 287   2                      {
+ 288   3                              delay(20);
+ 289   3                              if(KEY_fops.read(3) == 0)        //相应动作判断
+ 290   3                              {
+ 291   4                                      switch(index)
+ 292   4                                      {
+ 293   5                                               case 0: V_MIN+=10;break; //V_MAX       V_MIN
+ 294   5                                               case 1: V_MIN+=1;break;
+ 295   5                                               case 2: V_MAX+=10;break;
+ 296   5                                               case 3: V_MAX+=1;break;
+ 297   5                                      }
+ 298   4                                      while(!(KEY_fops.read(3)));
+C51 COMPILER V9.01   MAIN                                                                  04/24/2022 01:49:45 PAGE 6   
+
+ 299   4                              }
+ 300   3                      }
+ 301   2                      if(KEY_fops.read(4) == 0)
+ 302   2                      {
+ 303   3                              delay(20);
+ 304   3                              if(KEY_fops.read(4) == 0)        //相应动作判断
+ 305   3                              {
+ 306   4                                      switch(index)
+ 307   4                                      {
+ 308   5                                               case 0: V_MIN-=10;break; //V_MAX       V_MIN
+ 309   5                                               case 1: V_MIN-=1;break;
+ 310   5                                               case 2: V_MAX-=10;break;
+ 311   5                                               case 3: V_MAX-=1;break;
+ 312   5                                      }
+ 313   4                                      while(!(KEY_fops.read(4)));
+ 314   4                              }
+ 315   3                      }
+ 316   2                      if(V_MIN < 0) V_MIN = 0;
+ 317   2                      if(V_MIN > 100) V_MIN = 99;
+ 318   2                      if(V_MAX > 100) V_MAX = 99;
+ 319   2                      if(V_MAX < 0)  V_MAX = 0;
+ 320   2                      /* 将设置参数存储到内部EEPROM中 */
+ 321   2      #if             1
+ 322   2                      IAP_fops.erase(Region_1);
+ 323   2                      IAP_fops.program(Region_1,V_MIN);
+ 324   2                      IAP_fops.erase(Region_2);
+ 325   2                      IAP_fops.program(Region_2,V_MAX);
+ 326   2      #endif
+ 327   2                      sprintf(v_maxstr, "%2d",V_MAX);                   /* 变量转换成字符串存放在对应字符数组中 */
+ 328   2                      sprintf(v_minstr, "%2d",V_MIN); 
+ 329   2                              
+ 330   2                      switch(index)
+ 331   2                      {
+ 332   3                               case 0: LCD_fops.dis_char(0,2,v_minstr[0]);break; //V_MAX      V_MIN
+ 333   3                               case 1: LCD_fops.dis_char(1,2,v_minstr[1]);break;
+ 334   3                               case 2: LCD_fops.dis_char(14,2,v_maxstr[0]);break;
+ 335   3                               case 3: LCD_fops.dis_char(15,2,v_maxstr[1]);break;
+ 336   3                               default: LCD_fops.dis_char(0,2,v_minstr[0]);break;
+ 337   3                      }
+ 338   2                      
+ 339   2                      if(!List_Flag) {LCD_fops.write(0x0c,0); return;} //退出该线程   
+ 340   2               }
+ 341   1      }
+ 342          
+ 343          void Thread_two(void)
+ 344          {
+ 345   1              unsigned char index = 0;
+ 346   1               LCD_fops.dis_line("-protect I set -",1);
+ 347   1               LCD_fops.write(0x0d,0);   //打开所在字符闪烁
+ 348   1               sprintf(i_maxstr, "%2d",I_MAX);                  /* 变量转换成字符串存放在对应字符数组中 */
+ 349   1              sprintf(i_minstr, "%2d",I_MIN); 
+ 350   1               /* 液晶显示刷新 */
+ 351   1              LCD_fops.dis_str(0,2,i_minstr);
+ 352   1              LCD_fops.dis_char(3,2,'<');
+ 353   1              LCD_fops.dis_str(4,2,"I__range");       //在x=4 y=2 的位置开始显示字符串vol_str 
+ 354   1              LCD_fops.dis_char(12,2,'<');
+ 355   1              LCD_fops.dis_str(14,2,i_maxstr);
+ 356   1               while(1)
+ 357   1               {
+ 358   2                      if(KEY_fops.read(7) == 0)               //光标选择索引控制
+ 359   2                      {
+ 360   3                              delay(20);
+C51 COMPILER V9.01   MAIN                                                                  04/24/2022 01:49:45 PAGE 7   
+
+ 361   3                              if(KEY_fops.read(7) == 0)
+ 362   3                              {
+ 363   4                                      if(index >= 0 && index <=3) index ++;
+ 364   4                                      if(index < 0) index = 3;
+ 365   4                                      if(index > 3) index = 0;
+ 366   4                                      while(!(KEY_fops.read(7)));
+ 367   4                              }
+ 368   3                      }
+ 369   2                      if(KEY_fops.read(3) == 0)
+ 370   2                      {
+ 371   3                              delay(20);
+ 372   3                              if(KEY_fops.read(3) == 0)        //相应动作判断
+ 373   3                              {
+ 374   4                                      switch(index)
+ 375   4                                      {
+ 376   5                                               case 0: I_MIN+=10;break; //V_MAX       V_MIN
+ 377   5                                               case 1: I_MIN+=1;break;
+ 378   5                                               case 2: I_MAX+=10;break;
+ 379   5                                               case 3: I_MAX+=1;break;
+ 380   5                                      }
+ 381   4                                      while(!(KEY_fops.read(3)));
+ 382   4                              }
+ 383   3                      }
+ 384   2                      if(KEY_fops.read(4) == 0)
+ 385   2                      {
+ 386   3                              delay(20);
+ 387   3                              if(KEY_fops.read(4) == 0)        //相应动作判断
+ 388   3                              {
+ 389   4                                      switch(index)
+ 390   4                                      {
+ 391   5                                               case 0: I_MIN-=10;break; //V_MAX       V_MIN
+ 392   5                                               case 1: I_MIN-=1;break;
+ 393   5                                               case 2: I_MAX-=10;break;
+ 394   5                                               case 3: I_MAX-=1;break;
+ 395   5                                      }
+ 396   4                                      while(!(KEY_fops.read(4)));
+ 397   4                              }
+ 398   3                      }
+ 399   2                      if(I_MIN < 0) I_MIN = 0;
+ 400   2                      if(I_MIN > 10) I_MIN = 10;
+ 401   2                      if(I_MAX > 10) I_MAX = 10;
+ 402   2                      if(I_MAX < 0)  I_MAX = 0;
+ 403   2                      /* 将设置参数存储到内部EEPROM中 */
+ 404   2      #if             1
+ 405   2                      IAP_fops.erase(Region_3);
+ 406   2                      IAP_fops.program(Region_3,I_MIN);
+ 407   2                      IAP_fops.erase(Region_4);
+ 408   2                      IAP_fops.program(Region_4,I_MAX);
+ 409   2      #endif
+ 410   2                      sprintf(i_maxstr, "%2d",I_MAX);                   /* 变量转换成字符串存放在对应字符数组中 */
+ 411   2                      sprintf(i_minstr, "%2d",I_MIN); 
+ 412   2                              
+ 413   2                      switch(index)
+ 414   2                      {
+ 415   3                               case 0: LCD_fops.dis_char(0,2,i_minstr[0]);break; //V_MAX      V_MIN
+ 416   3                               case 1: LCD_fops.dis_char(1,2,i_minstr[1]);break;
+ 417   3                               case 2: LCD_fops.dis_char(14,2,i_maxstr[0]);break;
+ 418   3                               case 3: LCD_fops.dis_char(15,2,i_maxstr[1]);break;
+ 419   3                               default: LCD_fops.dis_char(0,2,i_minstr[0]);break;
+ 420   3                      }
+ 421   2                      
+ 422   2                      if(!List_Flag) {LCD_fops.write(0x0c,0); return;} //退出该线程   
+C51 COMPILER V9.01   MAIN                                                                  04/24/2022 01:49:45 PAGE 8   
+
+ 423   2               }
+ 424   1      }
+ 425          
+ 426          void Thread_three(void)
+ 427          {
+ 428   1              unsigned char index = 0;
+ 429   1               LCD_fops.dis_line("-protect P set -",1);
+ 430   1               LCD_fops.write(0x0d,0);   //打开所在字符闪烁
+ 431   1               sprintf(p_maxstr, "%2d",P_MAX);                  /* 变量转换成字符串存放在对应字符数组中 */
+ 432   1              sprintf(p_minstr, "%2d",P_MIN); 
+ 433   1               /* 液晶显示刷新 */
+ 434   1              LCD_fops.dis_str(0,2,p_minstr);
+ 435   1              LCD_fops.dis_char(3,2,'<');
+ 436   1              LCD_fops.dis_str(4,2,"P__range");       //在x=4 y=2 的位置开始显示字符串vol_str 
+ 437   1              LCD_fops.dis_char(12,2,'<');
+ 438   1              LCD_fops.dis_str(14,2,p_maxstr);
+ 439   1               while(1)
+ 440   1               {
+ 441   2                      if(KEY_fops.read(7) == 0)               //光标选择索引控制
+ 442   2                      {
+ 443   3                              delay(20);
+ 444   3                              if(KEY_fops.read(7) == 0)
+ 445   3                              {
+ 446   4                                      if(index >= 0 && index <=3) index ++;
+ 447   4                                      if(index < 0) index = 3;
+ 448   4                                      if(index > 3) index = 0;
+ 449   4                                      while(!(KEY_fops.read(7)));
+ 450   4                              }
+ 451   3                      }
+ 452   2                      if(KEY_fops.read(3) == 0)
+ 453   2                      {
+ 454   3                              delay(20);
+ 455   3                              if(KEY_fops.read(3) == 0)        //相应动作判断
+ 456   3                              {
+ 457   4                                      switch(index)
+ 458   4                                      {
+ 459   5                                               case 0: P_MIN+=10;break; //V_MAX       V_MIN
+ 460   5                                               case 1: P_MIN+=1;break;
+ 461   5                                               case 2: P_MAX+=10;break;
+ 462   5                                               case 3: P_MAX+=1;break;
+ 463   5                                      }
+ 464   4                                      while(!(KEY_fops.read(3)));
+ 465   4                              }
+ 466   3                      }
+ 467   2                      if(KEY_fops.read(4) == 0)
+ 468   2                      {
+ 469   3                              delay(20);
+ 470   3                              if(KEY_fops.read(4) == 0)        //相应动作判断
+ 471   3                              {
+ 472   4                                      switch(index)
+ 473   4                                      {
+ 474   5                                               case 0: P_MIN-=10;break; //V_MAX       V_MIN
+ 475   5                                               case 1: P_MIN-=1;break;
+ 476   5                                               case 2: P_MAX-=10;break;
+ 477   5                                               case 3: P_MAX-=1;break;
+ 478   5                                      }
+ 479   4                                      while(!(KEY_fops.read(4)));
+ 480   4                              }
+ 481   3                      }
+ 482   2                      if(P_MIN < 0) P_MIN = 0;
+ 483   2                      if(P_MIN > 10) P_MIN = 10;
+ 484   2                      if(P_MAX > 10) P_MAX = 10;
+C51 COMPILER V9.01   MAIN                                                                  04/24/2022 01:49:45 PAGE 9   
+
+ 485   2                      if(P_MAX < 0)  P_MAX = 0;
+ 486   2                      /* 将设置参数存储到内部EEPROM中 */
+ 487   2      #if             1
+ 488   2                      IAP_fops.erase(Region_5);
+ 489   2                      IAP_fops.program(Region_5,I_MIN);
+ 490   2                      IAP_fops.erase(Region_6);
+ 491   2                      IAP_fops.program(Region_6,I_MAX);
+ 492   2      #endif
+ 493   2                      sprintf(i_maxstr, "%2d",P_MAX);                   /* 变量转换成字符串存放在对应字符数组中 */
+ 494   2                      sprintf(i_minstr, "%2d",P_MIN); 
+ 495   2                              
+ 496   2                      switch(index)
+ 497   2                      {
+ 498   3                               case 0: LCD_fops.dis_char(0,2,p_minstr[0]);break; //V_MAX      V_MIN
+ 499   3                               case 1: LCD_fops.dis_char(1,2,p_minstr[1]);break;
+ 500   3                               case 2: LCD_fops.dis_char(14,2,p_maxstr[0]);break;
+ 501   3                               case 3: LCD_fops.dis_char(15,2,p_maxstr[1]);break;
+ 502   3                               default: LCD_fops.dis_char(0,2,p_minstr[0]);break;
+ 503   3                      }
+ 504   2                      
+ 505   2                      if(!List_Flag) {LCD_fops.write(0x0c,0); return;} //退出该线程   
+ 506   2               }
+ 507   1      }
+ 508          
+ 509          void Thread_four(void) 
+ 510          {
+ 511   1              bit flag;
+ 512   1              unsigned char i;
+ 513   1              LCD_fops.dis_line("-Display param -",1);
+ 514   1      
+ 515   1              /* 是否使用IAP中存储的参数 第一次使用需要用其他线程设置参数 */
+ 516   1      #if     1
+ 517   1              V_MIN = (int)IAP_fops.read(Region_1);
+ 518   1              V_MAX = (int)IAP_fops.read(Region_2);
+ 519   1              I_MIN = (int)IAP_fops.read(Region_3);
+ 520   1              I_MAX = (int)IAP_fops.read(Region_4);
+ 521   1              P_MIN = (int)IAP_fops.read(Region_5);
+ 522   1              P_MAX = (int)IAP_fops.read(Region_6);
+ 523   1      #endif  
+ 524   1      
+ 525   1              while(1)
+ 526   1              {
+ 527   2                      RELAY_fops.relay_ctl(1,1);      
+ 528   2                      if(flag)
+ 529   2                      {
+ 530   3                              for(i=0; i<10; i++)
+ 531   3                              {
+ 532   4                                      AD_Vtemp[i] = ADC_fops.adc_get(Measure_I);              
+ 533   4                              }
+ 534   3              
+ 535   3                              AVG_AD_Vtemp();
+ 536   3      
+ 537   3                              GETcurrent=(double)(AD_val*0.060791015625/111*5);       //按照2.5V/4096计算得到的结果
+ 538   3                              //存在误差 利用matlab进行曲线拟合
+ 539   3                              GETcurrent = -0.0062*pow(GETcurrent,6.0) + 0.0776*pow(GETcurrent,5.0) - 0.3777*pow(GETcurrent,4.0)+0.89
+             -87*pow(GETcurrent,3.0) -1.0724*pow(GETcurrent,2.0) + 1.4202* GETcurrent + 0.0714;
+ 540   3                              AD_val = 0;
+ 541   3      
+ 542   3                              //sprintf(cur_str, "%.1f",GETcurrent-(double)(((int)(GETcurrent*100))%10)/100);   //保留1位小数，不四舍
+             -五入进位
+ 543   3                              sprintf(cur_str, "%.2f",GETcurrent);
+ 544   3                              GETcurrent = atof(cur_str);     //字符串转换成double类型
+C51 COMPILER V9.01   MAIN                                                                  04/24/2022 01:49:45 PAGE 10  
+
+ 545   3                              if(I_MAX >= GETcurrent && I_MIN <= GETcurrent)
+ 546   3                              {
+ 547   4                                      RELAY_fops.relay_ctl(1,OPEN);    /* 继电器控制 */
+ 548   4                                      LED_fops.led_ctl(2,CLOSE);
+ 549   4                                      AUXR &= 0xEF;   //不使能定时器2
+ 550   4                                      AUXR |= 0x10;   //使能定时器2
+ 551   4                                      IE2 &= 0xFB;  //关闭定时器2中断
+ 552   4                              }
+ 553   3                              else if(I_MAX < GETcurrent || I_MIN > GETcurrent)  //不满足电流条件
+ 554   3                              {
+ 555   4                                      LED_fops.led_ctl(2,OPEN);
+ 556   4                                      RELAY_fops.relay_ctl(1,CLOSE);     /* 继电器控制 */
+ 557   4                                      AUXR |= 0x10;   //使能定时器2
+ 558   4                                      IE2 = 0x04;  //开启定时器2中断
+ 559   4                              }
+ 560   3                              LCD_fops.dis_str(0,1,"I:");
+ 561   3                              LCD_fops.dis_str(2,1,cur_str);  //在x=4 y=2 的位置开始显示字符串vol_str    
+ 562   3                              LCD_fops.dis_str(6,1,"A "); 
+ 563   3                              //printf("out Cur: %.1f\r\n",GETcurrent);       
+ 564   3                      }
+ 565   2                      else{
+ 566   3                              for(i=0; i<10; i++)
+ 567   3                              {
+ 568   4                                      AD_Vtemp[i] = ADC_fops.adc_get(Measure_V);              
+ 569   4                              }
+ 570   3                              AVG_AD_Vtemp();
+ 571   3              
+ 572   3                              GETvoltage=(double)(AD_val*0.0006103515625*40); //按照5V/4096计算得到的结果
+ 573   3                              AD_val = 0;
+ 574   3                              if(V_MAX >= GETvoltage && V_MIN <= GETvoltage)
+ 575   3                              {
+ 576   4                                      RELAY_fops.relay_ctl(1,OPEN);    /* 继电器控制 */
+ 577   4                                      LED_fops.led_ctl(3,CLOSE);       
+ 578   4                                      LED_fops.led_ctl(4,CLOSE);
+ 579   4                              }
+ 580   3                              else if(V_MAX < GETvoltage )  //过压
+ 581   3                              {
+ 582   4                                      LED_fops.led_ctl(3,OPEN);
+ 583   4                                      RELAY_fops.relay_ctl(1,CLOSE);     /* 继电器控制 */
+ 584   4                              }
+ 585   3                              else if(V_MIN > GETvoltage )  //欠压
+ 586   3                              {
+ 587   4                                      LED_fops.led_ctl(4,OPEN);
+ 588   4                                      RELAY_fops.relay_ctl(1,CLOSE);     /* 继电器控制 */
+ 589   4                              }
+ 590   3                              //memset(AD_Vtemp, 0, sizeof(AD_Vtemp));
+ 591   3                              sprintf(vol_str, "%.2f",GETvoltage);   //得到电压 乘以 放大倍数40
+ 592   3                              GETvoltage = atof(vol_str);     //字符串转换成double类型
+ 593   3                              LCD_fops.dis_str(8,1,"V:");
+ 594   3                              LCD_fops.dis_str(10,1,vol_str); //在x=8 y=8 的位置开始显示字符串vol_str    
+ 595   3                              LCD_fops.dis_char(15,1,'V');    
+ 596   3                              //printf("out Vol: %.2f\r\n",GETvoltage);
+ 597   3                      }
+ 598   2                      Power = GETvoltage * GETcurrent;
+ 599   2                      if(P_MAX >= Power && P_MIN <= Power)
+ 600   2                              {
+ 601   3                                      RELAY_fops.relay_ctl(1,OPEN);    /* 继电器控制 */
+ 602   3                                      LED_fops.led_ctl(1,CLOSE);
+ 603   3                                      AUXR &= 0xEF;   //不使能定时器2
+ 604   3                                      AUXR |= 0x10;   //使能定时器2
+ 605   3                                      IE2 &= 0xFB;  //关闭定时器2中断
+ 606   3                              }
+C51 COMPILER V9.01   MAIN                                                                  04/24/2022 01:49:45 PAGE 11  
+
+ 607   2                              else if(P_MAX < GETcurrent || P_MIN > GETcurrent)  //不满足功率条件
+ 608   2                              {
+ 609   3                                      LED_fops.led_ctl(1,OPEN);
+ 610   3                                      RELAY_fops.relay_ctl(1,CLOSE);     /* 继电器控制 */
+ 611   3                                      AUXR |= 0x10;   //使能定时器2
+ 612   3                                      IE2 = 0x04;  //开启定时器2中断
+ 613   3                              }
+ 614   2                      sprintf(pow_str, "%.2f",Power);   //得到功率
+ 615   2                      LCD_fops.dis_str(0,2,"P:");
+ 616   2                      LCD_fops.dis_str(2,2,pow_str);
+ 617   2                      LCD_fops.dis_char(7,2,'W');
+ 618   2                      flag = !flag;
+ 619   2                      if(!List_Flag) return; //退出该线程             
+ 620   2              }
+ 621   1      }
+ 622          
+ 623          void Thread_five(void) 
+ 624          {
+ 625   1              while(1)
+ 626   1              {
+ 627   2                      LCD_fops.dis_line("-- run four  --",1);
+ 628   2                      if(!List_Flag) return; //退出该线程             
+ 629   2              }
+ 630   1      }
+ 631          
+ 632          
+ 633          /********************************************************************/
+ 634          //延时函数delay(u16 Count)，有形参Count,无返回值
+ 635          /********************************************************************/
+ 636          void delay(unsigned int Count)
+ 637          {
+ 638   1        unsigned char i,j;
+ 639   1        while (Count--)//Count形参控制延时次数
+ 640   1        {
+ 641   2          for(i=0;i<50;i++)
+ 642   2            for(j=0;j<20;j++);
+ 643   2        }
+ 644   1      }
+ 645          
+ 646          
+ 647          /* KEY1 旋钮中断函数 */
+ 648          void INT0_Isr(void) interrupt 0
+ 649          {
+ 650   1      
+ 651   1              if(KEY_fops.read(1)==0)                                         //索引确定是否
+ 652   1              {        
+ 653   2                       if(List_Index<Max_Index)List_Index+=1;
+ 654   2                       else  List_Index = Min_Index;
+ 655   2                       while(!KEY_fops.read(1));
+ 656   2              }                                       
+ 657   1      
+ 658   1      }
+ 659          
+ 660          /**
+ 661           * @brief  Timer2Init 定时器2初始化
+ 662           * @param  无
+ 663           * @retval 无
+ 664           */
+ 665          void Timer2Init(void)           //2毫秒@24.000MHz
+ 666          {
+ 667   1              AUXR |= 0x04;           //定时器时钟1T模式
+ 668   1              T2L = 0x80;             //设置定时初值
+C51 COMPILER V9.01   MAIN                                                                  04/24/2022 01:49:45 PAGE 12  
+
+ 669   1              T2H = 0x44;             //设置定时初值  
+ 670   1      }
+ 671          
+ 672          
+ 673          
+ 674          
+ 675          /* EC11 按键中断函数 */
+ 676          void INT1_Isr() interrupt 2
+ 677          {
+ 678   1              
+ 679   1              if(KEY_fops.read(2)==0)                                         //索引确定是否
+ 680   1              {
+ 681   2                       List_Flag = !List_Flag;                                //判定为单击行为
+ 682   2              }
+ 683   1              while(!KEY_fops.read(2));
+ 684   1      }
+ 685          
+ 686          /**
+ 687           * @brief  TM2_Isr 定时器2 自恢复中断
+ 688           * @param  无
+ 689           * @retval 无
+ 690           */
+ 691          void TM2_Isr() interrupt 12 
+ 692          {
+ 693   1              static unsigned int i = 0;
+ 694   1              if(i>=4000)       //大约8秒自恢复一次
+ 695   1              {
+ 696   2                      RELAY_fops.relay_ctl(1,OPEN); //自恢复
+ 697   2                      i = 0;
+ 698   2                  AUXR &= 0xEF;       //不使能定时器2
+ 699   2              }
+ 700   1              i++;
+ 701   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   8338    ----
+   CONSTANT SIZE    =    407    ----
+   XDATA SIZE       =    268    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      1    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

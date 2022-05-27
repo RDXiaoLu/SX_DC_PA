@@ -1,0 +1,10 @@
+"..\Obj\Bsp_led.obj",
+"..\Obj\main.obj",
+"..\Obj\Bsp_key.obj",
+"..\Obj\Bsp_lcd.obj",
+"..\Obj\Bsp_adc.obj",
+"..\Obj\Bsp_relay.obj",
+"..\Obj\Bsp_uart.obj",
+"..\Obj\Bsp_lap.obj" 
+TO "..\Obj\test" 
+PRINT(".\test.m51") RAMSIZE(256) 

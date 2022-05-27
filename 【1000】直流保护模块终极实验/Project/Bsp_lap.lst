@@ -1,0 +1,164 @@
+C51 COMPILER V9.01   BSP_LAP                                                               04/24/2022 01:30:03 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE BSP_LAP
+OBJECT MODULE PLACED IN ..\Obj\Bsp_lap.obj
+COMPILER INVOKED BY: E:\KEILC51\C51\BIN\C51.EXE ..\User\lap\Bsp_lap.c LARGE OPTIMIZE(1,SPEED) BROWSE DEBUG OBJECTEXTEND 
+                    -PRINT(.\Bsp_lap.lst) OBJECT(..\Obj\Bsp_lap.obj)
+
+line level    source
+
+   1          #include "Bsp_lap.h"
+   2          #include "intrins.h"
+   3          
+   4          
+   5          static char IapRead(int addr); 
+   6          static void IapProgram(int addr, char dat);
+   7          static void IapErase(int addr);
+   8          static void Iap_Int_Program(int addr, int dat); 
+   9          static int Iap_Int_Read(int addr);
+  10          static void Iap_Int_Erase(int addr); 
+  11          /* C99支持乱序赋值结构体
+  12          struct led_operations LED{
+  13                  .num = LED_NUM;
+  14                  .led_ctl = LED_CTL;     
+  15          };
+  16          */
+  17          
+  18          //初始化LED外设结构体
+  19          struct iap_operations IAP_fops = {
+  20                  IAP_NUM,
+  21                  IapProgram,
+  22                  IapRead,
+  23                  IapErase,
+  24                  Iap_Int_Program,
+  25                  Iap_Int_Read,   
+  26                  Iap_Int_Erase,                                           
+  27                                                                           };
+  28          
+  29          /**
+  30           * @brief  IapIdle Iap控制
+  31           * @param  which 1-4  D1 D2 D3 D4        status 1-亮 0-灭
+  32           * @retval 无
+  33           */
+  34          static void IapIdle(void) 
+  35          { 
+  36   1              IAP_CONTR = 0; //关闭 IAP 功能
+  37   1              IAP_CMD = 0; //清除命令寄存器
+  38   1              IAP_TRIG = 0; //清除触发寄存器
+  39   1              IAP_ADDRH = 0x80; //将地址设置到非 IAP 区域
+  40   1              IAP_ADDRL = 0; 
+  41   1      }
+  42          
+  43          /**
+  44           * @brief  IapRead Iap读取
+  45           * @param  addr-读取地址
+  46           * @retval 无
+  47           */
+  48          static char IapRead(int addr) 
+  49          { 
+  50   1               char dat; 
+  51   1       
+  52   1               IAP_CONTR = 0x80; //使能 IAP
+  53   1               IAP_TPS = 24; //设置擦除等待参数 24MHz
+  54   1               IAP_CMD = 1; //设置 IAP 读命令
+C51 COMPILER V9.01   BSP_LAP                                                               04/24/2022 01:30:03 PAGE 2   
+
+  55   1               IAP_ADDRL = addr; //设置 IAP 低地址
+  56   1               IAP_ADDRH = addr >> 8; //设置 IAP 高地址
+  57   1               IAP_TRIG = 0x5a; //写触发命令(0x5a)
+  58   1               IAP_TRIG = 0xa5; //写触发命令(0xa5)
+  59   1               _nop_(); 
+  60   1               dat = IAP_DATA; //读 IAP 数据
+  61   1               IapIdle(); //关闭 IAP 功能
+  62   1               return dat; 
+  63   1      }
+  64          
+  65          /**
+  66           * @brief  IapErase Iap写入
+  67           * @param  addr-写入地址  dat-写入数据
+  68           * @retval 无
+  69           */
+  70          static void IapProgram(int addr, char dat) 
+  71          { 
+  72   1               IAP_CONTR = 0x80; //使能 IAP
+  73   1               IAP_TPS = 24; //设置擦除等待参数 24MHz
+  74   1               IAP_CMD = 2; //设置 IAP 写命令
+  75   1               IAP_ADDRL = addr; //设置 IAP 低地址
+  76   1               IAP_ADDRH = addr >> 8; //设置 IAP 高地址
+  77   1               IAP_DATA = dat; //写 IAP 数据
+  78   1               IAP_TRIG = 0x5a; //写触发命令(0x5a)
+  79   1               IAP_TRIG = 0xa5; //写触发命令(0xa5)
+  80   1               _nop_(); 
+  81   1               IapIdle(); //关闭 IAP 功能
+  82   1      }                       
+  83          /**
+  84           * @brief  IapErase Iap擦除
+  85           * @param  无
+  86           * @retval 无
+  87           */
+  88          
+  89          static void IapErase(int addr) 
+  90          { 
+  91   1               IAP_CONTR = 0x80; //使能 IAP
+  92   1               IAP_TPS = 24; //设置擦除等待参数 24MHz
+  93   1               IAP_CMD = 3; //设置 IAP 擦除命令
+  94   1               IAP_ADDRL = addr; //设置 IAP 低地址
+  95   1               IAP_ADDRH = addr >> 8; //设置 IAP 高地址
+  96   1               IAP_TRIG = 0x5a; //写触发命令(0x5a)
+  97   1               IAP_TRIG = 0xa5; //写触发命令(0xa5)
+  98   1               _nop_(); //
+  99   1               IapIdle(); //关闭 IAP 功能
+ 100   1      }
+ 101          
+ 102          /**
+ 103           * @brief  Iap_Int_Program Iap写入整形
+ 104           * @param  dat-写入int类型数据   addr
+ 105           * @retval 无
+ 106           */
+ 107          static void Iap_Int_Program(int addr, int dat) 
+ 108          {
+ 109   1              IapProgram(addr,  (char)(dat));
+ 110   1              IapProgram(addr+1,(char)(dat>>8));
+ 111   1              IapProgram(addr+2,(char)(dat>>16));
+ 112   1              IapProgram(addr+3,(char)(dat>>24)); 
+ 113   1      }
+ 114          
+ 115          static int Iap_Int_Read(int addr) 
+ 116          {
+C51 COMPILER V9.01   BSP_LAP                                                               04/24/2022 01:30:03 PAGE 3   
+
+ 117   1              int temp = 0;
+ 118   1              temp = temp | (int)(IapRead(addr));
+ 119   1              temp = temp | ((int)(IapRead(addr+1))<<8);
+ 120   1              temp = temp | ((int)(IapRead(addr+2))<<16);
+ 121   1              temp = temp | ((int)(IapRead(addr+3))<<24);
+ 122   1              return temp;
+ 123   1      }
+ 124          
+ 125          /**
+ 126           * @brief  Iap_Int_Erase Iap擦出整形
+ 127           * @param  addr-擦除地址
+ 128           * @retval 无
+ 129           */
+ 130          static void Iap_Int_Erase(int addr) 
+ 131          {
+ 132   1              IapErase(addr);
+ 133   1              IapErase(addr+1); 
+ 134   1              IapErase(addr+2);
+ 135   1              IapErase(addr+3);
+ 136   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    682    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     38    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,75 @@
+C51 COMPILER V9.01   BSP_ADC                                                               04/24/2022 01:30:03 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE BSP_ADC
+OBJECT MODULE PLACED IN ..\Obj\Bsp_adc.obj
+COMPILER INVOKED BY: E:\KEILC51\C51\BIN\C51.EXE ..\User\adc\Bsp_adc.c LARGE OPTIMIZE(1,SPEED) BROWSE DEBUG OBJECTEXTEND 
+                    -PRINT(.\Bsp_adc.lst) OBJECT(..\Obj\Bsp_adc.obj)
+
+line level    source
+
+   1          #include "Bsp_adc.h"
+   2          
+   3          extern void delay(unsigned int Count); /* 粗略延时 */
+   4          
+   5          static int ADC_GET(unsigned char which);
+   6          
+   7          /* C99支持乱序赋值结构体
+   8          struct led_operations LED{
+   9                  .num = LED_NUM;
+  10                  .led_ctl = LED_CTL;     
+  11          };
+  12          */
+  13          
+  14          //初始化LED外设结构体
+  15          struct adc_operations ADC_fops = {ADC_NUM , ADC_GET};
+  16          
+  17          /**
+  18           * @brief  LED_CTL LED控制
+  19           * @param  which 1-4  D1 D2 D3 D4        status 1-亮 0-灭
+  20           * @retval 0 设置成功1 设置失败
+  21           */
+  22          static int ADC_GET(unsigned char which)
+  23          {
+  24   1              int AD_Vtemp = 0;
+  25   1              ADC_CONTR &= 0xf0;
+  26   1              ADC_CONTR |= which;
+  27   1              ADC_CONTR|=0x40;                                        //启动ADC转换
+  28   1              delay(10);                                                              //延时等待转换完毕
+  29   1              while(!(ADC_CONTR&0x20));       //等待ADC转换结束
+  30   1              ADC_CONTR &= 0xDF;                                      //清零ADC转换结束标志位
+  31   1              AD_Vtemp = (unsigned int)ADC_RES<<4;
+  32   1              AD_Vtemp |= (unsigned int)ADC_RESL>>4;//处理左对齐格式下的ADC结果
+  33   1              return AD_Vtemp;
+  34   1      }
+  35          
+  36          /**
+  37           * @brief  ADC_Init ADC初始化
+  38           * @param  无
+  39           * @retval 无
+  40           */
+  41          void ADC_Init(void)
+  42          {
+  43   1              ADC_CONTR=0x02; //选定P1.2引脚作为ADC模拟电压输入引脚
+  44   1              //配置P1.2为高阻输入模式
+  45   1              P1M0&=0xFB;                     //P0M0.1=0
+  46   1              P1M1|=0x04;                     //P0M1.1=1
+  47   1              ADCCFG=0x0F;            //转换结果左对齐且ADC转换时钟为SYSCLK/2/16
+  48   1              ADC_CONTR|=0x80;//打开ADC电源
+  49   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    127    ----
+   CONSTANT SIZE    =   ----    ----
+C51 COMPILER V9.01   BSP_ADC                                                               04/24/2022 01:30:03 PAGE 2   
+
+   XDATA SIZE       =      8    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
