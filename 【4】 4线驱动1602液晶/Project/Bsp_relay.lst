@@ -1,0 +1,64 @@
+C51 COMPILER V9.01   BSP_RELAY                                                             04/20/2022 11:41:06 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE BSP_RELAY
+OBJECT MODULE PLACED IN ..\Obj\Bsp_relay.obj
+COMPILER INVOKED BY: E:\KEILC51\C51\BIN\C51.EXE ..\User\relay\Bsp_relay.c BROWSE DEBUG OBJECTEXTEND PRINT(.\Bsp_relay.ls
+                    -t) OBJECT(..\Obj\Bsp_relay.obj)
+
+line level    source
+
+   1          #include "Bsp_relay.h"
+   2          
+   3          static int RELAY_CTL(int which, int status);
+   4          
+   5          /* C99支持乱序赋值结构体
+   6          struct led_operations LED{
+   7                  .num = LED_NUM;
+   8                  .led_ctl = LED_CTL;     
+   9          };
+  10          */
+  11          
+  12          //初始化LED外设结构体
+  13          struct relay_operations RELAY_fops = {RELAY_NUM , RELAY_CTL};
+  14          
+  15          /**
+  16           * @brief  RELAY_CTL RELAY控制
+  17           * @param  which-relay1 该板仅1个继电器  status 1-打开 0-关闭  
+  18           * @retval 0 设置成功-1 设置失败
+  19           */
+  20          static int RELAY_CTL(int which, int status)
+  21          {
+  22   1              switch(which)
+  23   1              {
+  24   2                      case 1: relay = status;break;
+  25   2                      default: return -1;break;
+  26   2              }
+  27   1              return 0;
+  28   1      }
+  29          
+  30          /**
+  31           * @brief  RELAY_Init RELAY初始化
+  32           * @param  无
+  33           * @retval 无
+  34           */
+  35          void RELAY_Init(void)
+  36          {
+  37   1              P0M0|=0x08;                             //P0M0 0.3=1
+  38   1              P0M1&=0xF7;                             //P0M1 0.3=0
+  39   1              relay = 0;
+  40   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     33    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      5    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

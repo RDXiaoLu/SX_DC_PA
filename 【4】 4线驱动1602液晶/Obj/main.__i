@@ -1,0 +1,1 @@
+"..\User\main.c" OPTIMIZE (1,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\main.lst) OBJECT(..\Obj\main.obj)

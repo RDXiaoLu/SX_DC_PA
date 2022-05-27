@@ -1,0 +1,105 @@
+C51 COMPILER V9.01   MAIN                                                                  04/20/2022 15:13:14 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN ..\Obj\main.obj
+COMPILER INVOKED BY: E:\KEILC51\C51\BIN\C51.EXE ..\User\main.c OPTIMIZE(1,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\main.
+                    -lst) OBJECT(..\Obj\main.obj)
+
+line level    source
+
+   1          /*********************************************************************
+   2           * 实验名称：   流水灯实验
+   3           * 选配书籍：   上册-《深入浅出STC8增强型51单片机进阶攻略》2022已出版
+   4                                                                  下册-《深入浅出STC8增强型51单片机实战攻略》还在写作
+   5           * 书籍作者：   龙顺宇编著 清华大学出版社出版
+   6           * 淘宝店铺：   https://520mcu.taobao.com/
+   7           * 实验平台：   思修电子STC8“战将”系列小王子开发板
+   8           * 芯片型号：   STC8H3K64S4-LQFP32（程序微调后可移植至STC其他系列单片机）
+   9           * 时钟说明：   片内IRC高速24MHz时钟，使用STC-ISP下载程序时配置
+  10           * 实验说明：   无
+  11          *********************************************************************/
+  12          #include "STC8H.h"
+  13          #include "./led/Bsp_led.h"
+  14          #include "./key/Bsp_key.h"
+  15          #include "./lcd/Bsp_lcd.h"
+  16          /*****************************函数声明区域***************************/
+  17          static void delay(unsigned int Count); /* 粗略延时 */
+  18          static void OS_Init(void);       /* 系统硬件初始化 */
+  19          
+  20          unsigned char table1[17]="==SYS PASSWORD==";//LCD1602显示字符串数组1
+  21          unsigned char table2[17]="****************";//LCD1602显示字符串数组2
+  22          
+  23          
+  24          void main()
+  25          {
+  26   1              
+  27   1              
+  28   1              /* 系统硬件初始化 */
+  29   1              OS_Init();
+  30   1              delay(1000);
+  31   1              LCD_fops.write(table1[0],1);//写入table1[]内容
+  32   1              LCD_fops.write(table1[1],1);//写入table2[]内容
+  33   1              LCD_fops.write(table1[2],1);//写入table2[]内容
+  34   1              LCD_fops.write(table1[3],1);//写入table1[]内容
+  35   1              LCD_fops.write(table1[4],1);//写入table2[]内容
+  36   1              LCD_fops.write(table1[5],1);//写入table2[]内容
+  37   1              LCD_fops.write(table1[6],1);//写入table1[]内容
+  38   1              LCD_fops.write(table1[7],1);//写入table2[]内容
+  39   1              LCD_fops.write(table1[8],1);//写入table2[]内容
+  40   1              LCD_fops.write(table1[9],1);//写入table2[]内容
+  41   1              LCD_fops.write(table1[10],1);//写入table2[]内容
+  42   1              LCD_fops.write(table1[11],1);//写入table1[]内容
+  43   1              LCD_fops.write(table1[12],1);//写入table2[]内容
+  44   1              LCD_fops.write(table1[13],1);//写入table2[]内容
+  45   1              LCD_fops.write(table1[14],1);//写入table1[]内容
+  46   1              LCD_fops.write(table1[15],1);//写入table2[]内容
+  47   1              LCD_fops.write(table1[16],1);//写入table2[]内容
+  48   1              LCD_fops.dis_line(table2,1);
+  49   1              while(1);       
+  50   1      }
+  51          
+  52          /**
+  53           * @brief  OS_Init 系统硬件初始化
+  54           * @param  无
+C51 COMPILER V9.01   MAIN                                                                  04/20/2022 15:13:14 PAGE 2   
+
+  55           * @retval 无
+  56           */
+  57          static void OS_Init(void)
+  58          {
+  59   1              LED_Init();     
+  60   1              KEY_Init();
+  61   1              LCD_Init();
+  62   1      }
+  63          
+  64          /**
+  65           * @brief  delay 粗略延时
+  66           * @param  无
+  67           * @retval 无
+  68           */
+  69          static void delay(unsigned int Count)
+  70          {
+  71   1        unsigned char i,j;
+  72   1        while (Count--)//Count形参控制延时次数
+  73   1        {
+  74   2          for(i=0;i<50;i++)
+  75   2            for(j=0;j<20;j++);
+  76   2        }
+  77   1      }
+  78          
+  79          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    395    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     38    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

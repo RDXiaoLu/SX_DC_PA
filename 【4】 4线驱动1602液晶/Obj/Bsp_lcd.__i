@@ -1,0 +1,1 @@
+"..\User\lcd\Bsp_lcd.c" OPTIMIZE (1,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Bsp_lcd.lst) OBJECT(..\Obj\Bsp_lcd.obj)

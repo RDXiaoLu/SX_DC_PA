@@ -1,0 +1,142 @@
+C51 COMPILER V9.01   BSP_LCD                                                               04/20/2022 15:12:09 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE BSP_LCD
+OBJECT MODULE PLACED IN ..\Obj\Bsp_lcd.obj
+COMPILER INVOKED BY: E:\KEILC51\C51\BIN\C51.EXE ..\User\lcd\Bsp_lcd.c OPTIMIZE(1,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(
+                    -.\Bsp_lcd.lst) OBJECT(..\Obj\Bsp_lcd.obj)
+
+line level    source
+
+   1          #include "Bsp_lcd.h"
+   2          
+   3          static void lcd_delay(unsigned int Cnt);
+   4          static void LCD_WRITE(unsigned char cmdordata,unsigned char writetype);
+   5          static void Dis_Line(unsigned char *str, int y);
+   6          //static bit Busy(void);
+   7          
+   8          
+   9          /* C99支持乱序赋值结构体
+  10          struct led_operations LED{
+  11                  .num = LED_NUM;
+  12                  .led_ctl = LED_CTL;     
+  13          };
+  14          */
+  15          
+  16          //初始化LED外设结构体
+  17          struct lcd_operations LCD_fops = {
+  18                   LCD_NUM,
+  19                   LCD_WRITE,
+  20                   Dis_Line,
+  21          };
+  22          
+  23          
+  24          /**
+  25           * @brief  RELAY_CTL RELAY控制
+  26           * @param  which-relay1 该板仅1个继电器  status 1-打开 0-关闭  
+  27           * @retval 0 设置成功-1 设置失败
+  28           */
+  29           static void LCD_WRITE(unsigned char cmdordata,unsigned char writetype)
+  30          {
+  31   1              LCDRS=writetype;                                        //判断写入类型0为命令1为数据
+  32   1              lcd_delay(5);                                                                   //延时等待稳定
+  33   1              LCDDATA&=0x0F;                                          //清高四位
+  34   1              LCDDATA|=cmdordata&0xF0;        //写高四位
+  35   1              LCDEN=1;lcd_delay(10);                          //使能置“1”
+  36   1              LCDEN=0;lcd_delay(10);                          //使能清“0”
+  37   1              cmdordata=cmdordata<<4;         //低四位移到高四位
+  38   1              LCDDATA&=0x0F;                                          //清高四位
+  39   1              LCDDATA|=cmdordata&0xF0;        //写低四位
+  40   1              LCDEN=1;lcd_delay(10);                          //使能置“1”
+  41   1              LCDEN=0;lcd_delay(10);                          //使能清“0”
+  42   1      }
+  43          
+  44          /**
+  45           * @brief  Dis_Line str-要显示的字符串 不超过16个 y显示的行 0-第一行 1-第二行
+  46           * @param  无
+  47           * @retval 无
+  48           */
+  49          static void Dis_Line(unsigned char *str, int y)
+  50          {
+  51   1        unsigned char i=0;                                                                    //定义控制循环变量i
+  52   1        if(!y)
+  53   1              LCD_fops.write(0x80,0);//选择第一行
+  54   1        else LCD_fops.write(0xC0,0);  //第二行
+C51 COMPILER V9.01   BSP_LCD                                                               04/20/2022 15:12:09 PAGE 2   
+
+  55   1              lcd_delay(100);                                                 //等待液晶显示稳定
+  56   1        for(i=0;i<16;i++)                     //第一行先写入16个字符
+  57   1        {
+  58   2      
+  59   2                              lcd_delay(10);                          //等待液晶显示稳定
+  60   2                              LCD_fops.write(str[i],1);               //写入菜单项内容
+  61   2                              lcd_delay(10);                          //等待液晶显示稳定 
+  62   2      
+  63   2        }
+  64   1      }
+  65          
+  66          //static bit Busy(void)
+  67          //{
+  68          //      bit busy_flag = 0;
+  69          //      LCDRS = 0;
+  70          //      LCDRW = 1;
+  71          //      LCDEN = 1;
+  72          //      lcd_delay(10);
+  73          //      busy_flag = (bit)(P0 & 0x80);
+  74          //      LCDEN = 0;
+  75          //      return busy_flag;
+  76          //}
+  77          
+  78          /**
+  79           * @brief  LCD_Init LCD初始化
+  80           * @param  无
+  81           * @retval 无
+  82           */
+  83          void LCD_Init(void)
+  84          {
+  85   1              //配置P0.0-2为准双向/弱上拉模式
+  86   1              P0M0&=0xF8;                     //P0M0.4-6=0
+  87   1              P0M1&=0xF8;                     //P0M1.4-6=0
+  88   1              //配置P2.4-7为准双向/弱上拉模式
+  89   1              P2M0&=0x0F;                     //P2M0.4-7=0
+  90   1              P2M1&=0x0F;                     //P2M1.4-7=0
+  91   1              lcd_delay(5);                           //等待I/O模式配置稳定
+  92   1              LCDRW=0;                                //因只涉及写入操作，故将RW引脚直接置低
+  93   1              lcd_delay(5);                           //等待I/O模式配置稳定
+  94   1              LCD_fops.write(0x32,0);lcd_delay(10);//0x32非命令，参见HD44780数据手册
+  95   1              LCD_fops.write(0x28,0);lcd_delay(10);//数据总线为4位，显示2行，5*7点阵/每字符
+  96   1              LCD_fops.write(0x0C,0);lcd_delay(10);//设置开显示，不显示光标
+  97   1              LCD_fops.write(0x06,0);lcd_delay(10);//写入新数据后显示屏整体不移动仅光标右移
+  98   1              LCD_fops.write(0x01,0);lcd_delay(10);//写入清屏命令
+  99   1      
+ 100   1      }
+ 101          /**
+ 102           * @brief  LCD_Init LCD延时
+ 103           * @param  无
+ 104           * @retval 无
+ 105           */
+ 106          static void lcd_delay(unsigned int Cnt)
+ 107          {
+ 108   1        unsigned char i,j;
+ 109   1        while (Cnt--)//Count形参控制延时次数
+ 110   1        {
+ 111   2          for(i=0;i<50;i++)
+ 112   2            for(j=0;j<20;j++);
+ 113   2        }
+ 114   1      }
+
+
+C51 COMPILER V9.01   BSP_LCD                                                               04/20/2022 15:12:09 PAGE 3   
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    403    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     20    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,78 @@
+C51 COMPILER V9.01   BSP_KEY                                                               04/20/2022 15:09:01 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE BSP_KEY
+OBJECT MODULE PLACED IN ..\Obj\Bsp_key.obj
+COMPILER INVOKED BY: E:\KEILC51\C51\BIN\C51.EXE ..\User\key\Bsp_key.c OPTIMIZE(1,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(
+                    -.\Bsp_key.lst) OBJECT(..\Obj\Bsp_key.obj)
+
+line level    source
+
+   1          
+   2          #include "Bsp_key.h"
+   3          //#include "./../led/Bsp_led.h"         /* ./表示当前目录  ../表示上一级目录 */
+   4          /*****************************函数声明区域***************************/
+   5          static int KEY_READ(int which);
+   6          
+   7          /* C99支持乱序赋值结构体
+   8          struct led_operations LED{
+   9                  .num = KEY_NUM;
+  10                  .read = KEY_READ;       
+  11          };
+  12          */
+  13          
+  14          //初始化LED外设结构体
+  15          struct key_operations KEY_fops = {KEY_NUM , KEY_READ};
+  16          
+  17          /**
+  18           * @brief  KEY_READ KEY状态读取
+  19           * @param  which 1-8  选取相应按键
+  20           * @retval 引脚电平状态
+  21           */
+  22          static int KEY_READ(int which)
+  23          {
+  24   1              int temp = 0;
+  25   1              switch(which)
+  26   1              {
+  27   2                      case 1: return KEY1;
+  28   2                      case 2: return KEY2;
+  29   2                      case 3: return KEY3;
+  30   2                      case 4: return KEY4;
+  31   2                      case 5: return KEY5;
+  32   2                      case 6: return KEY6;
+  33   2                      case 7: return KEY7;
+  34   2                      case 8: return KEY8;
+  35   2                      default: return -1;break;
+  36   2              }
+  37   1      }
+  38          
+  39          /**
+  40           * @brief  KEY_Init KEY初始化
+  41           * @param  无
+  42           * @retval 无
+  43           */
+  44          void KEY_Init(void)
+  45          {
+  46   1              P3M0&=0x03;                             //P3M0.2-7=0
+  47   1              P3M1&=0x03;                             //P3M1.2-7=0
+  48   1              P5M0&=0xDF;
+  49   1              P5M0&=0xDF;
+  50   1              P1M0&=0x7F;
+  51   1              P1M0&=0x7F;
+  52   1      }
+
+
+C51 COMPILER V9.01   BSP_KEY                                                               04/20/2022 15:09:01 PAGE 2   
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    134    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      9    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
